@@ -5,7 +5,7 @@ from qtpy.QtWidgets import QSpacerItem, QSizePolicy
 from napari_plugin_engine import napari_hook_implementation
 from qtpy.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QSpinBox, QCheckBox
 from qtpy.QtWidgets import QTableWidget, QTableWidgetItem, QWidget, QGridLayout, QPushButton, QFileDialog
-from qtpy.QtCore import Qt
+from qtpy.QtCore import Qt, QTimer
 from magicgui.widgets import Table
 from napari._qt.qthreading import thread_worker
 
@@ -18,6 +18,8 @@ class PlotProfile(QWidget):
         super().__init__()
         self.viewer = napari_viewer
         napari_viewer.layers.selection.events.changed.connect(self._on_selection)
+        self.timer = QTimer()
+        self.timer.timeout.connect(self._update_layer)
 
         self.data = None
         self.former_line = None
@@ -73,28 +75,21 @@ class PlotProfile(QWidget):
         self.layout().addItem(verticalSpacer)
         # self.layout().setSpacing(0)
 
-        # we're using a thread worker because layer.mouse_drag_callbacks doesn't work
-        # as expected in napari 0.4.10.
-        # Todo: check later if the thread_worker can be replaced with a mouse/move/drag event
-        # https://napari.org/guides/stable/threading.html
-        @thread_worker
-        def loop_run():
-            while True:  # endless loop
-                time.sleep(0.5)
-                yield True
-
-        worker = loop_run()
-
-        def update_layer(whatever):
-            if self.cb_live_update.isChecked():
-                self.redraw()
-            if not self.isVisible():
-                worker.quit()
-
-        # Start the loop
-        worker.yielded.connect(update_layer)
-        worker.start()
         self.redraw()
+
+    def _update_layer(self):
+        if self.cb_live_update.isChecked():
+            self.redraw()
+        if not self.isVisible():
+            self.timer.stop()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.timer.start(500)
+
+    def closeEvent(self, event):
+        super().closeEvent(event)
+        self.timer.stop()
 
     def _on_selection(self, event):
         # redraw when layer selection has changed
